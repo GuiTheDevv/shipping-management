@@ -3,6 +3,169 @@ import { NextResponse } from "next/server";
 
 const supabase = createClient();
 
+// Type definitions for database responses
+interface MetricsData {
+  total_shipments: number;
+  delivered_shipments: number;
+  intransit_shipments: number;
+  received_shipments: number;
+  total_volume_cm3: number;
+  total_weight_g: number;
+  avg_volume_per_shipment_cm3: number;
+  avg_weight_per_shipment_g: number;
+  delivery_rate: number;
+  on_time_delivery_rate: number;
+}
+
+interface WarehouseData {
+  warehouse_name: string;
+  total_volume_cm3: number;
+  shipment_count: number;
+  capacity_volume_cm3: number;
+  utilization_percentage: number;
+  available_volume_cm3: number;
+}
+
+interface CarrierDataRaw {
+  carrier: string;
+  arrival_date: string;
+  shipment_count: number;
+  total_volume_cm3: number;
+  total_weight_g: number;
+  total_shipments: number;
+  delivered_shipments: number;
+  avg_delivery_time: number | null;
+  on_time_delivery_rate: number;
+  air_shipments: number;
+  sea_shipments: number;
+}
+
+interface DestinationDataRaw {
+  destination: string;
+  shipment_count: number;
+  percentage: number;
+  total_volume_cm3: number;
+  total_weight_g: number;
+  avg_delivery_time: number | null;
+}
+
+interface TimelineDataRaw {
+  date: string;
+  packages_received: number;
+  volume_received_cm3: number;
+  cumulative_packages: number;
+  cumulative_volume_cm3: number;
+}
+
+interface ModeDataRaw {
+  mode: string;
+  shipment_count: number;
+  percentage: number;
+  total_volume_cm3: number;
+  total_weight_g: number;
+}
+
+// Type definitions for response data
+interface DashboardMetrics {
+  totalShipments: number;
+  deliveredShipments: number;
+  intransitShipments: number;
+  receivedShipments: number;
+  totalVolume: number;
+  totalWeight: number;
+  avgVolumePerShipment: number;
+  avgWeightPerShipment: number;
+  deliveryRate: number;
+  onTimeDeliveryRate: number;
+}
+
+interface WarehouseUtilization {
+  warehouseName: string;
+  totalVolume: number;
+  shipmentCount: number;
+  capacityVolume: number;
+  utilizationPercentage: number;
+  availableVolume: number;
+}
+
+interface PieChartData {
+  name: string;
+  value: number;
+  volume: number;
+  color: string;
+}
+
+interface ModeDistribution {
+  mode: string;
+  count: number;
+  percentage: number;
+  volume: number;
+  weight: number;
+}
+
+interface CarrierBarChart {
+  carrier: string;
+  date: string;
+  count: number;
+  volume: number;
+  weight: number;
+}
+
+interface CapacityTimeline {
+  date: string;
+  packages: number;
+  volume: number;
+  cumulativePackages: number;
+  cumulativeVolume: number;
+}
+
+interface DestinationDistribution {
+  destination: string;
+  count: number;
+  percentage: number;
+  volume: number;
+  weight: number;
+  avgDeliveryTime: number | null;
+}
+
+interface CarrierPerformance {
+  carrier: string;
+  totalShipments: number;
+  deliveredShipments: number;
+  avgDeliveryTime: number | null;
+  onTimeDeliveryRate: number;
+  totalVolume: number;
+  totalWeight: number;
+  airShipments: number;
+  seaShipments: number;
+}
+
+interface Charts {
+  warehouseUtilizationPieChart: PieChartData[];
+  shipmentModeDistribution: ModeDistribution[];
+  carrierBarChart: CarrierBarChart[];
+  warehouseCapacityTimeline: CapacityTimeline[];
+  destinationDistribution: DestinationDistribution[];
+  carrierPerformance: CarrierPerformance[];
+}
+
+interface DashboardResponse {
+  totalShipments: number;
+  deliveredShipments: number;
+  intransitShipments: number;
+  receivedShipments: number;
+  totalVolume: number;
+  totalWeight: number;
+  dashboardMetrics: DashboardMetrics;
+  warehouseUtilization: WarehouseUtilization;
+  charts: Charts;
+  dateRange: {
+    from: string;
+    to: string;
+  };
+  lastUpdated: string;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -101,8 +264,8 @@ export async function GET(request: Request) {
       throw new Error(`Failed to fetch mode data: ${modeError.message}`);
     }
 
-    // Process the data
-    const metrics = metricsData?.[0] || {
+    // Process the data with proper typing
+    const metrics: MetricsData = (metricsData as MetricsData[])?.[0] || {
       total_shipments: 0,
       delivered_shipments: 0,
       intransit_shipments: 0,
@@ -115,7 +278,9 @@ export async function GET(request: Request) {
       on_time_delivery_rate: 0,
     };
 
-    const warehouse = warehouseData?.[0] || {
+    const warehouse: WarehouseData = (
+      warehouseData as WarehouseData[]
+    )?.[0] || {
       warehouse_name: "Main Warehouse",
       total_volume_cm3: 0,
       shipment_count: 0,
@@ -134,8 +299,8 @@ export async function GET(request: Request) {
     const warehouseAvailableM3 =
       Number(warehouse.available_volume_cm3) / 1000000;
 
-    // Build response
-    const dashboardData = {
+    // Build response with proper typing
+    const dashboardData: DashboardResponse = {
       totalShipments: Number(metrics.total_shipments),
       deliveredShipments: Number(metrics.delivered_shipments),
       intransitShipments: Number(metrics.intransit_shipments),
@@ -177,28 +342,36 @@ export async function GET(request: Request) {
             color: "#4ECDC4",
           },
         ],
-        shipmentModeDistribution: (modeData || []).map((item: any) => ({
-          mode: item.mode.charAt(0).toUpperCase() + item.mode.slice(1),
-          count: Number(item.shipment_count),
-          percentage: Number(item.percentage),
-          volume: Number(item.total_volume_cm3) / 1000000,
-          weight: Number(item.total_weight_g) / 1000,
-        })),
-        carrierBarChart: (carrierData || []).map((item: any) => ({
-          carrier: item.carrier,
-          date: item.arrival_date,
-          count: Number(item.shipment_count),
-          volume: Number(item.total_volume_cm3) / 1000000,
-          weight: Number(item.total_weight_g) / 1000,
-        })),
-        warehouseCapacityTimeline: (timelineData || []).map((item: any) => ({
+        shipmentModeDistribution: ((modeData as ModeDataRaw[]) || []).map(
+          (item) => ({
+            mode: item.mode.charAt(0).toUpperCase() + item.mode.slice(1),
+            count: Number(item.shipment_count),
+            percentage: Number(item.percentage),
+            volume: Number(item.total_volume_cm3) / 1000000,
+            weight: Number(item.total_weight_g) / 1000,
+          })
+        ),
+        carrierBarChart: ((carrierData as CarrierDataRaw[]) || []).map(
+          (item) => ({
+            carrier: item.carrier,
+            date: item.arrival_date,
+            count: Number(item.shipment_count),
+            volume: Number(item.total_volume_cm3) / 1000000,
+            weight: Number(item.total_weight_g) / 1000,
+          })
+        ),
+        warehouseCapacityTimeline: (
+          (timelineData as TimelineDataRaw[]) || []
+        ).map((item) => ({
           date: item.date,
           packages: Number(item.packages_received),
           volume: Number(item.volume_received_cm3) / 1000000,
           cumulativePackages: Number(item.cumulative_packages),
           cumulativeVolume: Number(item.cumulative_volume_cm3) / 1000000,
         })),
-        destinationDistribution: (destinationData || []).map((item: any) => ({
+        destinationDistribution: (
+          (destinationData as DestinationDataRaw[]) || []
+        ).map((item) => ({
           destination: item.destination,
           count: Number(item.shipment_count),
           percentage: Number(item.percentage),
@@ -208,8 +381,8 @@ export async function GET(request: Request) {
             ? Number(item.avg_delivery_time)
             : null,
         })),
-        carrierPerformance: (carrierData || []).reduce(
-          (acc: any[], item: any) => {
+        carrierPerformance: ((carrierData as CarrierDataRaw[]) || []).reduce(
+          (acc: CarrierPerformance[], item: CarrierDataRaw) => {
             if (!acc.some((c) => c.carrier === item.carrier)) {
               acc.push({
                 carrier: item.carrier,

@@ -44,6 +44,55 @@ interface PaginationInfo {
   hasPreviousPage: boolean;
 }
 
+// Type definitions for database responses
+interface ConsolidationGroupRaw {
+  group_id: string;
+  destination: string;
+  departure_date: string;
+  carrier: string;
+  mode: string;
+  shipment_count: string;
+  total_weight_g: number;
+  total_volume_cm3: number;
+  potential_savings_usd: string;
+  avg_weight_per_shipment_g: number;
+  avg_volume_per_shipment_cm3: number;
+}
+
+interface ShipmentDetailRaw {
+  shipment_id: number;
+  customer_id: number;
+  origin: string | null;
+  weight_g: number;
+  volume_cm3: number;
+  status: string;
+  arrival_date: string;
+  delivered_date: string | null;
+}
+
+interface ConsolidationSummaryRaw {
+  total_consolidation_groups: string;
+  total_consolidatable_shipments: string;
+  total_potential_savings_usd: string;
+  avg_shipments_per_group: string;
+  top_destination: string;
+  top_carrier: string;
+  top_mode: string;
+}
+
+interface ConsolidationResponse {
+  consolidationGroups: ConsolidationGroup[];
+  summary: ConsolidationSummary;
+  pagination: PaginationInfo;
+  filters: {
+    carrier: string;
+    mode: string;
+    destination: string;
+    minGroupSize: number;
+  };
+  lastUpdated: string;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -114,7 +163,7 @@ export async function GET(request: Request) {
     // Process consolidation groups
     const consolidationGroups: ConsolidationGroup[] = [];
 
-    for (const group of groupsData || []) {
+    for (const group of (groupsData as ConsolidationGroupRaw[]) || []) {
       const consolidationGroup: ConsolidationGroup = {
         id: group.group_id,
         destination: group.destination,
@@ -142,7 +191,9 @@ export async function GET(request: Request) {
         );
 
         if (!detailsError && detailsData) {
-          consolidationGroup.shipments = detailsData.map((shipment: any) => ({
+          consolidationGroup.shipments = (
+            detailsData as ShipmentDetailRaw[]
+          ).map((shipment: ShipmentDetailRaw) => ({
             shipment_id: shipment.shipment_id,
             customer_id: shipment.customer_id,
             origin: shipment.origin || "Unknown",
@@ -180,7 +231,9 @@ export async function GET(request: Request) {
     }
 
     // Process summary data
-    const summary: ConsolidationSummary = summaryData?.[0]
+    const summary: ConsolidationSummary = (
+      summaryData as ConsolidationSummaryRaw[]
+    )?.[0]
       ? {
           totalGroups: Number.parseInt(
             summaryData[0].total_consolidation_groups
@@ -218,7 +271,7 @@ export async function GET(request: Request) {
       hasPreviousPage: page > 1,
     };
 
-    return NextResponse.json({
+    const response: ConsolidationResponse = {
       consolidationGroups,
       summary,
       pagination,
@@ -229,7 +282,9 @@ export async function GET(request: Request) {
         minGroupSize,
       },
       lastUpdated: new Date().toISOString(),
-    });
+    };
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Unexpected error:", error);
     return NextResponse.json(

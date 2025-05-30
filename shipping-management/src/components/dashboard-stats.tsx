@@ -35,7 +35,6 @@ export function DashboardStats({
   totalShipments,
   deliveredShipments,
   intransitShipments,
-  receivedShipments,
   totalVolume,
   totalWeight,
   dashboardMetrics,

@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
             maxRowBytes: 10000,
           })
         )
-        .on("data", async (data: any) => {
+        .on("data", async (data) => {
           processedRows++;
 
           const shipment_id = Number(data.shipment_id);
@@ -147,10 +147,10 @@ export async function POST(req: NextRequest) {
           }
 
           if (
-            !VALID_DESTINATIONS.includes(destination as any) ||
-            !VALID_CARRIERS.includes(carrier as any) ||
-            !VALID_MODES.includes(mode as any) ||
-            !VALID_STATUSES.includes(status as any)
+            !VALID_DESTINATIONS.includes(destination) ||
+            !VALID_CARRIERS.includes(carrier) ||
+            !VALID_MODES.includes(mode) ||
+            !VALID_STATUSES.includes(status)
           ) {
             invalidEnumValues++;
             return;

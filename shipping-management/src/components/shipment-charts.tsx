@@ -72,7 +72,6 @@ interface ShipmentChartsProps {
 
 export function ShipmentCharts({
   chartData,
-  warehouseUtilization,
   detailed = false,
 }: ShipmentChartsProps) {
   const COLORS = [

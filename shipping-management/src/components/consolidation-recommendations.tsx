@@ -50,6 +50,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getCountryName } from "@/utils/country-names";
+import { DestinationCountry } from "@/types/shipment";
 
 interface ConsolidationGroup {
   id: string;
@@ -810,7 +811,9 @@ export function ConsolidationRecommendations() {
                         <div className="flex items-center gap-2">
                           <MapPin className="h-4 w-4 text-gray-500" />
                           <span className="font-medium">
-                            {getCountryName(group.destination as any)}
+                            {getCountryName(
+                              group.destination as DestinationCountry
+                            )}
                           </span>
                         </div>
                       </TableCell>
@@ -864,7 +867,10 @@ export function ConsolidationRecommendations() {
                                 Consolidation Group Details
                               </DialogTitle>
                               <DialogDescription>
-                                {getCountryName(group.destination as any)} -{" "}
+                                {getCountryName(
+                                  group.destination as DestinationCountry
+                                )}{" "}
+                                -{" "}
                                 {new Date(
                                   group.departureDate
                                 ).toLocaleDateString()}{" "}
