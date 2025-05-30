@@ -36,6 +36,7 @@ Freight Forwarding Shipment Management take-home assessment
 1. Clone the repository
 2. cd/shipping-management (change directory to the project folder)
 3. npm install --legacy-peer-deps (intall all dependencies safely)
+4. npm run dev (start the development server)
 
 ### Environment Variables
 
