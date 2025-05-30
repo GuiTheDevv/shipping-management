@@ -1,0 +1,15 @@
+CREATE TABLE public.shipments (
+  shipment_id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  customer_id bigint,
+  origin text,
+  destination text,
+  weight bigint,  -- stored in grams
+  volume bigint,  -- stored in cubic centimeters (cm³)
+  carrier text,
+  mode text,
+  status text,
+  arrival_date date,
+  departure_date date,
+  delivered_date date,
+  CONSTRAINT shipments_pkey PRIMARY KEY (shipment_id)
+);
