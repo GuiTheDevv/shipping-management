@@ -31,12 +31,52 @@ const ShipmentSchema = z.object({
 
 export type Shipment = z.infer<typeof ShipmentSchema>;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const supabase = createClient();
-    const { data, error } = await supabase.from("shipments").select("*");
+    const { searchParams } = new URL(request.url);
 
-    console.log("Retrieved from Supabase:", data?.length || 0);
+    // Pagination parameters
+    const page = Number.parseInt(searchParams.get("page") || "1");
+    const limit = Number.parseInt(searchParams.get("limit") || "50");
+    const offset = (page - 1) * limit;
+
+    // Filter parameters
+    const status = searchParams.get("status");
+    const carrier = searchParams.get("carrier");
+    const destination = searchParams.get("destination");
+    const search = searchParams.get("search");
+
+    const supabase = createClient();
+
+    // Build the query
+    let query = supabase.from("shipments").select("*", { count: "exact" });
+
+    // Apply filters
+    if (status && status !== "all") {
+      query = query.eq("status", status);
+    }
+    if (carrier && carrier !== "all") {
+      query = query.eq("carrier", carrier);
+    }
+    if (destination && destination !== "all") {
+      query = query.eq("destination", destination);
+    }
+    if (search) {
+      query = query.or(
+        `shipment_id.eq.${search},customer_id.eq.${search},origin.ilike.%${search}%,carrier.ilike.%${search}%`
+      );
+    }
+
+    // Apply pagination and ordering - CHANGED TO ASCENDING ORDER
+    query = query
+      .order("shipment_id", { ascending: true })
+      .range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    console.log(
+      `Retrieved ${data?.length || 0} shipments (page ${page}, total: ${count})`
+    );
 
     if (error) {
       console.error("Supabase error:", error.message);
@@ -50,9 +90,18 @@ export async function GET() {
     }
 
     if (!data) {
-      return NextResponse.json({ shipments: [] });
+      return NextResponse.json({
+        shipments: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        },
+      });
     }
 
+    // Validate the data
     const validated = data
       .map((item) => ShipmentSchema.safeParse(item))
       .filter(
@@ -60,7 +109,19 @@ export async function GET() {
       )
       .map((result) => result.data);
 
-    return NextResponse.json({ shipments: validated });
+    const totalPages = Math.ceil((count || 0) / limit);
+
+    return NextResponse.json({
+      shipments: validated,
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    });
   } catch (error) {
     console.error("Unexpected error:", error);
     return NextResponse.json(

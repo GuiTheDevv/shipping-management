@@ -1,7 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Eye, Package, MapPin, Truck } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  Search,
+  Eye,
+  Package,
+  MapPin,
+  Truck,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -35,19 +43,57 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Shipment,
-  ShipmentStatus,
-  ShippingCarrier,
-  DestinationCountry,
-} from "@/types/shipment";
 import { getCountryName } from "@/utils/country-names";
 
-interface ShipmentTableProps {
-  shipments: Shipment[];
+type ShipmentStatus = "received" | "intransit" | "delivered";
+type ShippingCarrier = "FEDEX" | "DHL" | "USPS" | "UPS" | "AMAZON";
+type DestinationCountry =
+  | "GUY"
+  | "SVG"
+  | "SLU"
+  | "BIM"
+  | "DOM"
+  | "GRD"
+  | "SKN"
+  | "ANU"
+  | "SXM"
+  | "FSXM";
+
+interface Shipment {
+  shipment_id: number;
+  customer_id: number;
+  origin: string | null;
+  destination: DestinationCountry;
+  weight: number;
+  volume: number;
+  carrier: ShippingCarrier;
+  mode: "air" | "sea";
+  status: ShipmentStatus;
+  arrival_date: string | null;
+  departure_date?: string | null;
+  delivered_date?: string | null;
 }
 
-export function ShipmentTable({ shipments }: ShipmentTableProps) {
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+export function ShipmentTable() {
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 0,
+    hasNext: false,
+    hasPrev: false,
+  });
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<ShipmentStatus | "all">(
     "all"
@@ -62,26 +108,83 @@ export function ShipmentTable({ shipments }: ShipmentTableProps) {
     null
   );
 
-  const filteredShipments = shipments.filter((shipment) => {
-    const countryName = getCountryName(shipment.destination);
-    const matchesSearch =
-      shipment.shipment_id.toString().includes(searchTerm) ||
-      shipment.customer_id.toString().includes(searchTerm) ||
-      countryName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      shipment.carrier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      shipment.origin.toLowerCase().includes(searchTerm.toLowerCase());
+  const fetchShipments = async (page = 1, customLimit?: number) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: (customLimit || pagination.limit).toString(),
+      });
 
-    const matchesStatus =
-      statusFilter === "all" || shipment.status === statusFilter;
-    const matchesCarrier =
-      carrierFilter === "all" || shipment.carrier === carrierFilter;
-    const matchesDestination =
-      destinationFilter === "all" || shipment.destination === destinationFilter;
+      if (statusFilter !== "all") params.append("status", statusFilter);
+      if (carrierFilter !== "all") params.append("carrier", carrierFilter);
+      if (destinationFilter !== "all")
+        params.append("destination", destinationFilter);
+      if (searchTerm.trim()) params.append("search", searchTerm.trim());
 
-    return (
-      matchesSearch && matchesStatus && matchesCarrier && matchesDestination
-    );
-  });
+      const response = await fetch(`/api/shipments?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch shipments");
+
+      const data = await response.json();
+      setShipments(data.shipments);
+      setPagination(data.pagination);
+    } catch (error) {
+      console.error("Error fetching shipments:", error);
+      setShipments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch shipments when filters change
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchShipments(1); // Reset to page 1 when filters change
+    }, 300); // Debounce search
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter, carrierFilter, destinationFilter]);
+
+  // Initial load
+  useEffect(() => {
+    fetchShipments();
+  }, []);
+
+  const handlePageChange = (newPage: number) => {
+    fetchShipments(newPage);
+  };
+
+  const handlePageSizeChange = (newLimit: string) => {
+    const newLimitNumber = Number.parseInt(newLimit);
+    setPagination((prev) => ({ ...prev, limit: newLimitNumber, page: 1 }));
+
+    // Use the new limit value directly in the API call
+    const params = new URLSearchParams({
+      page: "1",
+      limit: newLimitNumber.toString(),
+    });
+
+    if (statusFilter !== "all") params.append("status", statusFilter);
+    if (carrierFilter !== "all") params.append("carrier", carrierFilter);
+    if (destinationFilter !== "all")
+      params.append("destination", destinationFilter);
+    if (searchTerm.trim()) params.append("search", searchTerm.trim());
+
+    setLoading(true);
+    fetch(`/api/shipments?${params}`)
+      .then((response) => response.json())
+      .then((data) => {
+        setShipments(data.shipments);
+        setPagination(data.pagination);
+      })
+      .catch((error) => {
+        console.error("Error fetching shipments:", error);
+        setShipments([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
 
   const getStatusBadge = (status: ShipmentStatus) => {
     const variants = {
@@ -108,14 +211,21 @@ export function ShipmentTable({ shipments }: ShipmentTableProps) {
   };
 
   const calculateDeliveryStatus = (shipment: Shipment) => {
-    if (shipment.status !== "delivered" || !shipment.delivered_date)
+    if (
+      shipment.status !== "delivered" ||
+      !shipment.delivered_date ||
+      !shipment.departure_date
+    )
       return null;
 
-    const arrivalDate = new Date(shipment.arrival_date);
+    const departureDate = new Date(shipment.departure_date);
     const deliveredDate = new Date(shipment.delivered_date);
-    const isOnTime = deliveredDate <= arrivalDate;
+    const daysDiff = Math.ceil(
+      (deliveredDate.getTime() - departureDate.getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
 
-    return isOnTime ? "On Time" : "Delayed";
+    return daysDiff <= 14 ? "On Time" : "Delayed";
   };
 
   return (
@@ -202,9 +312,29 @@ export function ShipmentTable({ shipments }: ShipmentTableProps) {
           </Select>
         </div>
 
-        {/* Results count */}
-        <div className="text-sm text-muted-foreground">
-          Showing {filteredShipments.length} of {shipments.length} shipments
+        {/* Results info and page size selector */}
+        <div className="flex justify-between items-center">
+          <div className="text-sm text-muted-foreground">
+            Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
+            {pagination.total} shipments
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Show:</span>
+            <Select
+              value={pagination.limit.toString()}
+              onValueChange={handlePageSizeChange}
+            >
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Table */}
@@ -224,172 +354,226 @@ export function ShipmentTable({ shipments }: ShipmentTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredShipments.map((shipment) => (
-                <TableRow key={shipment.shipment_id}>
-                  <TableCell className="font-medium">
-                    #{shipment.shipment_id}
-                  </TableCell>
-                  <TableCell>{shipment.customer_id}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Truck className="h-4 w-4" />
-                      {shipment.carrier}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" />
-                      {getCountryName(shipment.destination)}
-                    </div>
-                  </TableCell>
-                  <TableCell>{getModeBadge(shipment.mode)}</TableCell>
-                  <TableCell>{getStatusBadge(shipment.status)}</TableCell>
-                  <TableCell>{shipment.weight}kg</TableCell>
-                  <TableCell>{shipment.volume}m³</TableCell>
-                  <TableCell>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          className="hover:cursor-pointer "
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedShipment(shipment)}
-                        >
-                          <Eye className="h-4 w-4" />
-                          <p>View Details</p>
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                          <DialogTitle>
-                            Shipment Details - #{shipment.shipment_id}
-                          </DialogTitle>
-                          <DialogDescription>
-                            Complete information for this shipment
-                          </DialogDescription>
-                        </DialogHeader>
-                        {selectedShipment && (
-                          <div className="grid gap-6">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Shipment ID
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  #{selectedShipment.shipment_id}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Customer ID
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedShipment.customer_id}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Carrier
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedShipment.carrier}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Mode
-                                </label>
-                                <div className="mt-1">
-                                  {getModeBadge(selectedShipment.mode)}
-                                </div>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Status
-                                </label>
-                                <div className="mt-1">
-                                  {getStatusBadge(selectedShipment.status)}
-                                </div>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Delivery Status
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {calculateDeliveryStatus(selectedShipment) ||
-                                    "N/A"}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Weight
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedShipment.weight} kg
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Volume
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedShipment.volume} m³
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Arrival Date
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedShipment.arrival_date}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Departure Date
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedShipment.departure_date || "Not set"}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Delivered Date
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedShipment.delivered_date ||
-                                    "Not delivered"}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 gap-4">
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Origin
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedShipment.origin}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Destination
-                                </label>
-                                <p className="text-sm text-muted-foreground">
-                                  {getCountryName(selectedShipment.destination)}{" "}
-                                  ({selectedShipment.destination})
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </DialogContent>
-                    </Dialog>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8">
+                    Loading shipments...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : shipments.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8">
+                    No shipments found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                shipments.map((shipment) => (
+                  <TableRow key={shipment.shipment_id}>
+                    <TableCell className="font-medium">
+                      #{shipment.shipment_id}
+                    </TableCell>
+                    <TableCell>{shipment.customer_id}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Truck className="h-4 w-4" />
+                        {shipment.carrier}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        {getCountryName(shipment.destination)}
+                      </div>
+                    </TableCell>
+                    <TableCell>{getModeBadge(shipment.mode)}</TableCell>
+                    <TableCell>{getStatusBadge(shipment.status)}</TableCell>
+                    <TableCell>
+                      {(shipment.weight / 1000).toFixed(1)}kg
+                    </TableCell>
+                    <TableCell>
+                      {(shipment.volume / 1000000).toFixed(2)}m³
+                    </TableCell>
+                    <TableCell>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedShipment(shipment)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>
+                              Shipment Details - #{shipment.shipment_id}
+                            </DialogTitle>
+                            <DialogDescription>
+                              Complete information for this shipment
+                            </DialogDescription>
+                          </DialogHeader>
+                          {selectedShipment && (
+                            <div className="grid gap-6">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Shipment ID
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    #{selectedShipment.shipment_id}
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Customer ID
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {selectedShipment.customer_id}
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Carrier
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {selectedShipment.carrier}
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Mode
+                                  </label>
+                                  <div className="mt-1">
+                                    {getModeBadge(selectedShipment.mode)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Status
+                                  </label>
+                                  <div className="mt-1">
+                                    {getStatusBadge(selectedShipment.status)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Delivery Status
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {calculateDeliveryStatus(
+                                      selectedShipment
+                                    ) || "N/A"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Weight
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {(selectedShipment.weight / 1000).toFixed(
+                                      1
+                                    )}{" "}
+                                    kg
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Volume
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {(
+                                      selectedShipment.volume / 1000000
+                                    ).toFixed(2)}{" "}
+                                    m³
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Arrival Date
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {selectedShipment.arrival_date || "Not set"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Departure Date
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {selectedShipment.departure_date ||
+                                      "Not set"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Delivered Date
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {selectedShipment.delivered_date ||
+                                      "Not delivered"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-4">
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Origin
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {selectedShipment.origin || "Not specified"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Destination
+                                  </label>
+                                  <p className="text-sm text-muted-foreground">
+                                    {getCountryName(
+                                      selectedShipment.destination
+                                    )}{" "}
+                                    ({selectedShipment.destination})
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Page {pagination.page} of {pagination.totalPages}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(pagination.page - 1)}
+              disabled={!pagination.hasPrev || loading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(pagination.page + 1)}
+              disabled={!pagination.hasNext || loading}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

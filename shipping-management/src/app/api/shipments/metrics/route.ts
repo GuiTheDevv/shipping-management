@@ -17,11 +17,6 @@ export async function GET(request: Request) {
     const dateTo =
       searchParams.get("dateTo") || today.toISOString().split("T")[0];
 
-    console.log("Fetching dashboard data for date range:", {
-      dateFrom,
-      dateTo,
-    });
-
     // Fetch basic shipment metrics
     const { data: metricsData, error: metricsError } = await supabase.rpc(
       "get_dashboard_metrics_fixed",
@@ -128,8 +123,6 @@ export async function GET(request: Request) {
       utilization_percentage: 0,
       available_volume_cm3: 60000000000,
     };
-
-    console.log("Warehouse:", warehouse);
 
     // Convert units for display (cm³ to m³, g to kg)
     const totalVolumeM3 = Number(metrics.total_volume_cm3) / 1000000;

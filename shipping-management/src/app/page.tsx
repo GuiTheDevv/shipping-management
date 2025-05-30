@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/file-upload";
 import { DashboardStats } from "@/components/dashboard-stats";
 import { ShipmentCharts } from "@/components/shipment-charts";
+import { ShipmentTable } from "@/components/shipment-table";
+import { ConsolidationRecommendations } from "@/components/consolidation-recommendations";
 
 interface DashboardData {
   totalShipments: number;
@@ -116,11 +118,6 @@ export default function Dashboard() {
         setLoading(true);
       }
 
-      // Get date range for last 30 days
-      const today = new Date();
-      const thirtyDaysAgo = new Date(today);
-      thirtyDaysAgo.setDate(today.getDate() - 30);
-
       const response = await fetch(`/api/shipments/metrics`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
@@ -137,7 +134,6 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
       setDashboardData(null);
-      // You might want to show an error toast here
     } finally {
       setLoading(false);
       if (showRefreshIndicator) setRefreshing(false);
@@ -317,10 +313,6 @@ export default function Dashboard() {
                 dashboardMetrics={dashboardData.dashboardMetrics}
                 warehouseUtilization={dashboardData.warehouseUtilization}
               />
-              <ShipmentCharts
-                chartData={dashboardData.charts}
-                warehouseUtilization={dashboardData.warehouseUtilization}
-              />
             </TabsContent>
 
             <TabsContent value="analytics" className="space-y-6">
@@ -355,7 +347,7 @@ export default function Dashboard() {
                               On-time Rate:
                             </span>
                             <div className="font-medium">
-                              {carrier.onTimeDeliveryRate}%
+                              {carrier.onTimeDeliveryRate.toFixed(1)}%
                             </div>
                           </div>
                           <div>
@@ -364,7 +356,7 @@ export default function Dashboard() {
                             </span>
                             <div className="font-medium">
                               {carrier.avgDeliveryTime
-                                ? `${carrier.avgDeliveryTime} days`
+                                ? `${carrier.avgDeliveryTime.toFixed(1)} days`
                                 : "N/A"}
                             </div>
                           </div>
@@ -381,7 +373,7 @@ export default function Dashboard() {
                               Total Volume:
                             </span>
                             <div className="font-medium">
-                              {carrier.totalVolume.toFixed(2)}m³
+                              {carrier.totalVolume.toFixed(1)}m³
                             </div>
                           </div>
                         </div>
@@ -393,37 +385,11 @@ export default function Dashboard() {
             </TabsContent>
 
             <TabsContent value="shipments" className="space-y-6">
-              <Card>
-                <CardContent className="py-8">
-                  <div className="text-center text-muted-foreground">
-                    <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>
-                      Shipment table will be available once individual shipment
-                      data is loaded.
-                    </p>
-                    <p className="text-sm">
-                      Upload a CSV file to view detailed shipment records.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              <ShipmentTable />
             </TabsContent>
 
             <TabsContent value="consolidation" className="space-y-6">
-              <Card>
-                <CardContent className="py-8">
-                  <div className="text-center text-muted-foreground">
-                    <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>
-                      Consolidation recommendations will be available once
-                      shipment data is loaded.
-                    </p>
-                    <p className="text-sm">
-                      Upload a CSV file to view consolidation opportunities.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              <ConsolidationRecommendations />
             </TabsContent>
           </Tabs>
         ) : (
@@ -444,7 +410,7 @@ export default function Dashboard() {
         {/* Data freshness indicator */}
         {dashboardData && (
           <div className="text-center text-xs text-muted-foreground">
-            Last updated: {new Date(dashboardData.lastUpdated).toLocaleString()}{" "}
+            Last updated: {new Date(dashboardData.lastUpdated).toLocaleString()}
           </div>
         )}
       </div>
